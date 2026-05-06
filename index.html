@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Major League Keyword Scanner V6 (Standalone)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-slate-50 p-4 md:p-10 font-sans text-slate-800">
+    <div class="max-w-6xl mx-auto bg-white shadow-xl rounded-xl overflow-hidden border border-slate-200">
+        <div class="bg-slate-900 p-6 text-white flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold">🛡️ Advanced Content Audit Tool v6</h1>
+                <p class="text-slate-400 text-sm mt-1">Built-in AC Engine | Zero External Dependencies for Scanning</p>
+            </div>
+        </div>
+
+        <div class="p-6 grid grid-cols-1 xl:grid-cols-4 gap-6">
+            <div class="space-y-6 border-r border-slate-100 pr-4 xl:col-span-1">
+                <!-- 1. Load Ban Database Section -->
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-2">1. Load Ban Database</label>
+                    <input type="file" id="csvFile" accept=".csv" class="text-sm block w-full file:bg-slate-100 file:border-0 file:rounded-md file:px-4 file:py-2 file:text-slate-700 cursor-pointer mb-2">
+                    
+                    <div id="dbStatus" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-700 p-3 rounded-lg text-sm flex justify-between items-center">
+                        <span id="dbCount">0 Loaded</span>
+                    </div>
+
+                    <!-- NEW: Imported Keyword Viewer -->
+                    <div id="keywordLibraryContainer" class="hidden mt-3">
+                        <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Preview Loaded Rules</label>
+                        <div id="keywordLibrary" class="h-40 overflow-y-auto border border-slate-200 rounded p-2 text-xs bg-slate-50 custom-scrollbar flex flex-wrap gap-1 content-start shadow-inner">
+                            <!-- Keywords will populate here -->
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-2">2. Search Engine</label>
+                    <select id="engine" class="w-full p-2 border border-slate-300 rounded-md text-sm bg-white cursor-pointer shadow-sm focus:ring-2 focus:ring-blue-500">
+                        <option value="aho">Aho-Corasick (Built-in High Performance)</option>
+                        <option value="evasion">Anti-Evasion (Smart Mapping) 🔥</option>
+                        <option value="plain">Plaintext (Basic)</option>
+                        <option value="regex">Regex (Strict Pattern)</option>
+                        <option value="fuzzy">Fuzzy Search (Typos)</option>
+                    </select>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-2">Safe Whitelist (Comma Separated)</label>
+                    <textarea id="whitelist" rows="2" class="w-full p-2 text-xs border rounded outline-none focus:ring-1 focus:ring-emerald-500" placeholder="e.g. 正常测试, 官方认证">whitelisted keyword</textarea>
+                    <p class="text-[9px] text-slate-400 mt-1">Words here will NEVER trigger a violation.</p>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <input type="checkbox" id="caseSensitive" class="w-4 h-4 text-blue-600 cursor-pointer rounded">
+                    <label for="caseSensitive" class="text-sm font-medium text-slate-700 cursor-pointer">Case Sensitive</label>
+                </div>
+
+                <div id="fuzzySettings" class="hidden bg-blue-50 p-3 rounded-lg border border-blue-100">
+                    <label class="block text-xs font-bold uppercase text-blue-700 mb-2">Sensitivity Threshold</label>
+                    <input type="range" id="threshold" min="0.1" max="0.8" step="0.1" value="0.3" class="w-full cursor-pointer accent-blue-600">
+                    <div class="flex justify-between text-[10px] text-blue-500 font-semibold mt-1"><span>Strict</span><span>0.3</span><span>Loose</span></div>
+                </div>
+
+                <button onclick="runScan()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-lg transition-all shadow-lg active:scale-95">
+                    Run Security Audit
+                </button>
+            </div>
+
+            <div class="xl:col-span-3 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-2">3. Input Context (Markdown Supported)</label>
+                    <textarea id="inputText" rows="8" class="w-full p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-slate-800 font-mono text-sm shadow-inner" placeholder="Paste your context here."></textarea>
+                </div>
+
+                <div id="resultsArea" class="hidden space-y-4 transition-all duration-500">
+                    <div id="statusBadge" class="p-4 rounded-lg text-sm font-bold shadow-sm flex items-center gap-2"></div>
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 shadow-sm text-center">
+                            <span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Hits</span>
+                            <span id="matchCount" class="text-3xl font-black text-slate-800">0</span>
+                        </div>
+                        <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 shadow-sm text-center md:col-span-3 flex items-center justify-center gap-2 flex-wrap" id="uniqueKeywordsBox"></div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-2 mt-4">Audit Trace (Highlighted Original Context)</label>
+                        <div id="highlightedBox" class="p-5 bg-slate-50 border border-slate-200 rounded-lg whitespace-pre-wrap leading-relaxed text-slate-700 shadow-inner font-mono text-sm overflow-x-auto"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class CustomAhoCorasick {
+            constructor(keywords) {
+                this.root = { next: {}, fail: null, output: [] };
+                this.buildTrie(keywords);
+                this.buildFailures();
+            }
+            buildTrie(keywords) {
+                for (let kw of keywords) {
+                    let node = this.root;
+                    for (let i = 0; i < kw.length; i++) {
+                        let char = kw[i];
+                        if (!node.next[char]) node.next[char] = { next: {}, fail: null, output: [] };
+                        node = node.next[char];
+                    }
+                    node.output.push(kw);
+                }
+            }
+            buildFailures() {
+                let queue = [];
+                for (let char in this.root.next) {
+                    this.root.next[char].fail = this.root;
+                    queue.push(this.root.next[char]);
+                }
+                while (queue.length > 0) {
+                    let current = queue.shift();
+                    for (let char in current.next) {
+                        let child = current.next[char];
+                        let failNode = current.fail;
+                        while (failNode !== null && !failNode.next[char]) failNode = failNode.fail;
+                        child.fail = failNode ? failNode.next[char] : this.root;
+                        child.output = child.output.concat(child.fail.output);
+                        queue.push(child);
+                    }
+                }
+            }
+            search(text) {
+                let results = [];
+                let node = this.root;
+                for (let i = 0; i < text.length; i++) {
+                    let char = text[i];
+                    while (node !== null && !node.next[char]) node = node.fail;
+                    node = node ? node.next[char] : this.root;
+                    for (let match of node.output) {
+                        results.push({ endIdx: i, word: match });
+                    }
+                }
+                return results;
+            }
+        }
+
+        let keywords = [];
+        const engineSelect = document.getElementById('engine');
+        const fuzzySettings = document.getElementById('fuzzySettings');
+
+        const evasionMap = {
+            '0': 'o', '1': 'l', '@': 'a', '3': 'e', '!': 'i',
+            'o': '[o0@]', 'l': '[l1!]', 'a': '[a@]', 'e': '[e3]', 'i': '[i!1]',
+            '鄉': '[香鄉]', '香': '[香鄉]', '復': '[复復]', '复': '[复復]'
+        };
+
+        engineSelect.addEventListener('change', () => {
+            fuzzySettings.classList.toggle('hidden', engineSelect.value !== 'fuzzy');
+        });
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag] || tag));
+        }
+
+        // UPDATED: CSV Parser with Keyword Library Preview
+        document.getElementById('csvFile').addEventListener('change', (e) => {
+            if(!e.target.files.length) return;
+            Papa.parse(e.target.files[0], {
+                header: true, skipEmptyLines: true,
+                complete: (results) => {
+                    // Extract keywords
+                    keywords = results.data.map(row => row.Keyword).filter(k => k);
+                    
+                    // Update the status badge
+                    document.getElementById('dbStatus').classList.remove('hidden');
+                    document.getElementById('dbCount').innerText = `${keywords.length} Ban Rules Active`;
+                    
+                    // Show the library container and populate it with visual tags
+                    document.getElementById('keywordLibraryContainer').classList.remove('hidden');
+                    const libraryBox = document.getElementById('keywordLibrary');
+                    libraryBox.innerHTML = keywords.map(k => 
+                        `<span class="bg-white border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md text-[10px] shadow-sm font-medium truncate max-w-full" title="${escapeHTML(k)}">${escapeHTML(k)}</span>`
+                    ).join('');
+                }
+            });
+        });
+
+        function buildSmartRegex(keyword, isCS) {
+            const chars = keyword.split('');
+            const pattern = chars.map(c => {
+                const lowerC = c.toLowerCase();
+                return evasionMap[lowerC] || c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }).join('(?:[\\s_\\-🇭🇰🇨🇳\\*\\#\\@\\.]+)?');
+            return new RegExp(pattern, isCS ? 'g' : 'gi');
+        }
+
+        function runScan() {
+            const originalText = document.getElementById('inputText').value;
+            const engine = engineSelect.value;
+            const isCS = document.getElementById('caseSensitive').checked;
+            
+            if (!originalText || keywords.length === 0) return alert("Please load the CSV and input text first.");
+
+            let textToScan = originalText;
+            const whitelist = document.getElementById('whitelist').value.split(',').map(s => s.trim()).filter(s => s);
+            const wlPlaceholders = [];
+
+            whitelist.forEach((wlWord, idx) => {
+                if(!wlWord) return;
+                const reg = new RegExp(wlWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), isCS ? 'g' : 'gi');
+                textToScan = textToScan.replace(reg, match => {
+                    const marker = `[[SAFEWORD_${idx}_${wlPlaceholders.length}]]`;
+                    wlPlaceholders.push({ marker: marker, content: match });
+                    return marker;
+                });
+            });
+
+            let matchData = []; 
+            const resultsArea = document.getElementById('resultsArea');
+            resultsArea.classList.remove('hidden');
+
+            if (engine === 'aho') {
+                const searchDictionary = isCS ? [...keywords] : keywords.map(k => k.toLowerCase());
+                const ac = new CustomAhoCorasick(searchDictionary);
+                const searchTarget = isCS ? textToScan : textToScan.toLowerCase();
+                const rawMatches = ac.search(searchTarget);
+                
+                rawMatches.forEach(m => {
+                    const kwInTrie = m.word;
+                    const originalKw = isCS ? kwInTrie : keywords.find(k => k.toLowerCase() === kwInTrie);
+                    const startIdx = m.endIdx - kwInTrie.length + 1;
+                    matchData.push({ foundString: textToScan.substring(startIdx, m.endIdx + 1), keyword: originalKw });
+                });
+            } 
+            else if (engine === 'evasion') {
+                keywords.forEach(kw => {
+                    const pattern = buildSmartRegex(kw, isCS);
+                    const hits = textToScan.match(pattern) || [];
+                    hits.forEach(hit => {
+                        if(!hit.includes('[[SAFEWORD_')) matchData.push({ foundString: hit, keyword: kw });
+                    });
+                });
+            }
+            else if (engine === 'plain') {
+                keywords.forEach(kw => {
+                    if ((isCS ? textToScan : textToScan.toLowerCase()).includes(isCS ? kw : kw.toLowerCase())) {
+                        matchData.push({ foundString: kw, keyword: kw });
+                    }
+                });
+            } 
+            else if (engine === 'regex') {
+                const pattern = new RegExp(keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), isCS ? 'g' : 'gi');
+                const hits = textToScan.match(pattern) || [];
+                hits.forEach(hit => {
+                    const matchedKw = keywords.find(k => isCS ? k === hit : k.toLowerCase() === hit.toLowerCase()) || hit;
+                    matchData.push({ foundString: hit, keyword: matchedKw });
+                });
+            } 
+            else if (engine === 'fuzzy') {
+                const fuse = new Fuse(keywords, { threshold: document.getElementById('threshold').value });
+                const textSegments = textToScan.split(/[\s,。，！？!\n\t"'\(\)\[\]]+/);
+                textSegments.forEach(segment => {
+                    if (/^[A-Za-z]+$/.test(segment) && segment.length < 4) return; 
+                    if (segment.length < 1 || segment.includes('[[SAFEWORD_')) return; 
+                    
+                    const res = fuse.search(segment);
+                    if (res.length > 0) matchData.push({ foundString: segment, keyword: res[0].item });
+                });
+            }
+
+            updateUI(originalText, textToScan, matchData, wlPlaceholders, isCS);
+        }
+
+        function updateUI(originalText, scannedText, matchData, wlPlaceholders, isCS) {
+            const badge = document.getElementById('statusBadge');
+            const highlightBox = document.getElementById('highlightedBox');
+            const uniqueKeywordsBox = document.getElementById('uniqueKeywordsBox');
+            
+            document.getElementById('matchCount').innerText = matchData.length;
+            const uniqueDetected = [...new Set(matchData.map(m => m.keyword))];
+            
+            if (matchData.length > 0) {
+                badge.className = "p-4 rounded-lg text-sm font-bold shadow-sm bg-red-100 text-red-800 border border-red-200 flex items-center gap-2";
+                badge.innerHTML = "<span>🛑</span> COMPLIANCE ALERT: Restricted Keywords Detected";
+                
+                uniqueKeywordsBox.innerHTML = `<span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider w-full mb-1">Triggered Rules</span>` + 
+                    uniqueDetected.map(kw => `<span class="bg-red-500 text-white text-xs px-2 py-1 rounded shadow-sm">${escapeHTML(kw)}</span>`).join('');
+
+                const uniqueMatches = [];
+                const map = new Map();
+                matchData.forEach(m => {
+                    const key = m.foundString.toLowerCase() + "|" + m.keyword;
+                    if (!map.has(key)) {
+                        map.set(key, true);
+                        uniqueMatches.push(m);
+                    }
+                });
+
+                uniqueMatches.sort((a, b) => b.foundString.length - a.foundString.length);
+
+                let html = escapeHTML(scannedText);
+                const highlightPlaceholders = [];
+
+                uniqueMatches.forEach((m, idx) => {
+                    const safeFound = escapeHTML(m.foundString);
+                    const escapedRegExTarget = safeFound.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const reg = new RegExp(escapedRegExTarget, isCS ? 'g' : 'gi');
+                    
+                    html = html.replace(reg, (matchedStr) => {
+                        const marker = `{{%%_${idx}_${highlightPlaceholders.length}_%%}}`;
+                        highlightPlaceholders.push({
+                            marker: marker,
+                            content: `<mark class="bg-red-500 text-white px-1 rounded shadow-sm">${matchedStr}</mark><span class="inline-block mx-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-yellow-300 shadow-sm whitespace-nowrap align-middle">🎯 ${escapeHTML(m.keyword)}</span>`
+                        });
+                        return marker;
+                    });
+                });
+
+                highlightPlaceholders.forEach(p => html = html.replace(p.marker, p.content));
+                
+                wlPlaceholders.forEach(p => {
+                    const escapedMarker = escapeHTML(p.marker);
+                    html = html.replace(escapedMarker, `<span class="text-emerald-600 font-bold border-b border-emerald-300 border-dashed" title="Whitelisted Safe Word">${escapeHTML(p.content)}</span>`);
+                });
+
+                highlightBox.innerHTML = html;
+            } else {
+                badge.className = "p-4 rounded-lg text-sm font-bold shadow-sm bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-2";
+                badge.innerHTML = "<span>✅</span> SCAN CLEAN: No restricted content found.";
+                uniqueKeywordsBox.innerHTML = `<span class="text-sm text-slate-400 font-medium">None</span>`;
+                
+                let html = escapeHTML(scannedText);
+                wlPlaceholders.forEach(p => {
+                    html = html.replace(escapeHTML(p.marker), `<span class="text-emerald-600 font-bold border-b border-emerald-300 border-dashed" title="Whitelisted Safe Word">${escapeHTML(p.content)}</span>`);
+                });
+                highlightBox.innerHTML = html;
+            }
+        }
+    </script>
+</body>
+</html>
